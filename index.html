@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Competitor Tracker MVP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center font-sans p-4">
+    
+    <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-100 w-full max-w-lg">
+        <div class="mb-6 text-center">
+            <h1 class="text-2xl font-bold text-slate-800">Competitor Tracker</h1>
+            <p class="text-sm text-slate-500 mt-1">Monitor pricing pages and feature updates.</p>
+        </div>
+
+        <form id="trackerForm" class="space-y-4">
+            <div>
+                <label for="urlInput" class="block text-sm font-medium text-slate-700 mb-1">Target URL</label>
+                <input 
+                    type="url" 
+                    id="urlInput" 
+                    placeholder="https://competitor.com/pricing" 
+                    required
+                    class="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                >
+            </div>
+
+            <button 
+                type="submit" 
+                id="checkBtn"
+                class="w-full bg-blue-600 text-white font-medium py-2 px-4 rounded-md hover:bg-blue-700 transition duration-200 disabled:bg-blue-400 disabled:cursor-not-allowed"
+            >
+                Check for Updates
+            </button>
+        </form>
+
+        <div id="resultBox" class="mt-6 hidden p-4 rounded-md border text-sm transition-all">
+            <p id="resultMessage" class="font-medium"></p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('trackerForm');
+        const urlInput = document.getElementById('urlInput');
+        const checkBtn = document.getElementById('checkBtn');
+        const resultBox = document.getElementById('resultBox');
+        const resultMessage = document.getElementById('resultMessage');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Stops the page from refreshing on submit
+            
+            const url = urlInput.value.trim();
+            if (!url) return;
+
+            // 1. Set Loading UI State
+            checkBtn.disabled = true;
+            checkBtn.textContent = 'Checking...';
+            resultBox.classList.add('hidden'); // Hide previous results
+
+            try {
+                // 2. Send the POST request to our FastAPI backend
+                const response = await fetch('/api/check_url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                // 3. Clear previous styling from the result box
+                resultBox.classList.remove('hidden', 'bg-green-50', 'border-green-200', 'text-green-800', 'bg-slate-50', 'border-slate-200', 'text-slate-800', 'bg-red-50', 'border-red-200', 'text-red-800');
+                
+                // 4. Apply new UI styling based on the API response
+                if (data.status === 'error') {
+                    // Handle scraping errors
+                    resultBox.classList.add('bg-red-50', 'border-red-200', 'text-red-800');
+                    resultMessage.textContent = "⚠️ " + data.message;
+                } else if (data.changed) {
+                    // Handle detected changes (or first-time scrape)
+                    resultBox.classList.add('bg-green-50', 'border-green-200', 'text-green-800');
+                    resultMessage.textContent = "✅ " + data.message;
+                } else {
+                    // Handle identical content
+                    resultBox.classList.add('bg-slate-50', 'border-slate-200', 'text-slate-800');
+                    resultMessage.textContent = "⏸️ " + data.message;
+                }
+
+            } catch (error) {
+                // Handle server crashes or network failures
+                resultBox.classList.remove('hidden');
+                resultBox.classList.add('bg-red-50', 'border-red-200', 'text-red-800');
+                resultMessage.textContent = "Network error. Ensure the Uvicorn server is running.";
+            } finally {
+                // 5. Reset button state back to normal
+                checkBtn.disabled = false;
+                checkBtn.textContent = 'Check for Updates';
+            }
+        });
+    </script>
+</body>
+</html>
