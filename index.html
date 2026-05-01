@@ -8,7 +8,7 @@
 </head>
 <body class="bg-slate-50 min-h-screen flex items-center justify-center font-sans p-4">
     
-    <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-100 w-full max-w-lg">
+    <div class="bg-white p-8 rounded-xl shadow-lg border border-slate-100 w-full max-w-2xl">
         <div class="mb-6 text-center">
             <h1 class="text-2xl font-bold text-slate-800">Competitor Tracker</h1>
             <p class="text-sm text-slate-500 mt-1">Monitor pricing pages and feature updates.</p>
@@ -35,8 +35,18 @@
             </button>
         </form>
 
-        <div id="resultBox" class="mt-6 hidden p-4 rounded-md border text-sm transition-all">
-            <p id="resultMessage" class="font-medium"></p>
+        <div id="resultBox" class="mt-6 hidden p-5 rounded-md border text-sm transition-all">
+            <p id="resultStatus" class="font-bold mb-3 text-lg"></p>
+            
+            <div id="summaryContainer" class="mb-4 hidden">
+                <h3 class="font-semibold text-slate-800 mb-2">AI Analysis:</h3>
+                <div id="summaryContent" class="text-slate-700 space-y-2"></div>
+            </div>
+
+            <button id="toggleDiffBtn" type="button" class="hidden text-blue-600 hover:text-blue-800 font-medium text-sm transition focus:outline-none">
+                + View Raw Changes
+            </button>
+            <pre id="rawDiffContent" class="hidden mt-3 bg-slate-900 text-slate-300 p-4 rounded-md overflow-x-auto whitespace-pre-wrap font-mono text-xs border border-slate-700"></pre>
         </div>
     </div>
 
@@ -45,21 +55,45 @@
         const urlInput = document.getElementById('urlInput');
         const checkBtn = document.getElementById('checkBtn');
         const resultBox = document.getElementById('resultBox');
-        const resultMessage = document.getElementById('resultMessage');
+        const resultStatus = document.getElementById('resultStatus');
+        const summaryContainer = document.getElementById('summaryContainer');
+        const summaryContent = document.getElementById('summaryContent');
+        const toggleDiffBtn = document.getElementById('toggleDiffBtn');
+        const rawDiffContent = document.getElementById('rawDiffContent');
 
+        // Toggle Diff Visibility
+        toggleDiffBtn.addEventListener('click', () => {
+            const isHidden = rawDiffContent.classList.contains('hidden');
+            if (isHidden) {
+                rawDiffContent.classList.remove('hidden');
+                toggleDiffBtn.textContent = '- Hide Raw Changes';
+            } else {
+                rawDiffContent.classList.add('hidden');
+                toggleDiffBtn.textContent = '+ View Raw Changes';
+            }
+        });
+
+        // Main Form Submit
         form.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Stops the page from refreshing on submit
+            e.preventDefault();
             
             const url = urlInput.value.trim();
             if (!url) return;
 
-            // 1. Set Loading UI State
+            // 1. Reset UI State
             checkBtn.disabled = true;
-            checkBtn.textContent = 'Checking...';
-            resultBox.classList.add('hidden'); // Hide previous results
+            checkBtn.textContent = 'Analyzing...';
+            
+            resultBox.classList.add('hidden');
+            resultBox.classList.remove('bg-green-50', 'border-green-200', 'bg-slate-50', 'border-slate-200', 'bg-red-50', 'border-red-200');
+            
+            summaryContainer.classList.add('hidden');
+            toggleDiffBtn.classList.add('hidden');
+            rawDiffContent.classList.add('hidden');
+            toggleDiffBtn.textContent = '+ View Raw Changes'; // Reset toggle text
 
             try {
-                // 2. Send the POST request to our FastAPI backend
+                // 2. Call the API
                 const response = await fetch('/api/check_url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -68,31 +102,41 @@
 
                 const data = await response.json();
 
-                // 3. Clear previous styling from the result box
-                resultBox.classList.remove('hidden', 'bg-green-50', 'border-green-200', 'text-green-800', 'bg-slate-50', 'border-slate-200', 'text-slate-800', 'bg-red-50', 'border-red-200', 'text-red-800');
+                // 3. Display Results
+                resultBox.classList.remove('hidden');
                 
-                // 4. Apply new UI styling based on the API response
                 if (data.status === 'error') {
-                    // Handle scraping errors
                     resultBox.classList.add('bg-red-50', 'border-red-200', 'text-red-800');
-                    resultMessage.textContent = "⚠️ " + data.message;
+                    resultStatus.textContent = "⚠️ " + data.message;
                 } else if (data.changed) {
-                    // Handle detected changes (or first-time scrape)
-                    resultBox.classList.add('bg-green-50', 'border-green-200', 'text-green-800');
-                    resultMessage.textContent = "✅ " + data.message;
+                    resultBox.classList.add('bg-green-50', 'border-green-200');
+                    resultStatus.className = "font-bold mb-3 text-lg text-green-800";
+                    resultStatus.textContent = "✅ " + data.message;
+                    
+                    // Inject AI Summary
+                    if (data.summary) {
+                        summaryContainer.classList.remove('hidden');
+                        summaryContent.innerHTML = data.summary;
+                    }
+
+                    // Setup Raw Diff Toggle
+                    if (data.raw_diff && data.raw_diff !== "No previous data to compare against.") {
+                        toggleDiffBtn.classList.remove('hidden');
+                        rawDiffContent.textContent = data.raw_diff;
+                    }
+
                 } else {
-                    // Handle identical content
-                    resultBox.classList.add('bg-slate-50', 'border-slate-200', 'text-slate-800');
-                    resultMessage.textContent = "⏸️ " + data.message;
+                    resultBox.classList.add('bg-slate-50', 'border-slate-200');
+                    resultStatus.className = "font-bold mb-3 text-lg text-slate-800";
+                    resultStatus.textContent = "⏸️ " + data.message;
                 }
 
             } catch (error) {
-                // Handle server crashes or network failures
                 resultBox.classList.remove('hidden');
-                resultBox.classList.add('bg-red-50', 'border-red-200', 'text-red-800');
-                resultMessage.textContent = "Network error. Ensure the Uvicorn server is running.";
+                resultBox.classList.add('bg-red-50', 'border-red-200');
+                resultStatus.className = "font-bold mb-3 text-lg text-red-800";
+                resultStatus.textContent = "⚠️ Network error. Ensure the Uvicorn server is running.";
             } finally {
-                // 5. Reset button state back to normal
                 checkBtn.disabled = false;
                 checkBtn.textContent = 'Check for Updates';
             }
